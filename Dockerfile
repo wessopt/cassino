@@ -1,26 +1,29 @@
-FROM richarvey/nginx-php-fpm:php74
+# Usar uma imagem base estável com PHP 7.4, Nginx e FPM
+FROM webdevops/php-nginx:7.4
 
-# Copy application code first
-COPY . /var/www/html
-
-# Set permissions for storage and bootstrap/cache
-# Ensure www-data user (used by php-fpm and nginx) can write.
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \
-    chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
-
-# Environment variables for the base image and Laravel
-ENV WEBROOT /var/www/html/public
-ENV PHP_ERRORS_STDERR 1
-ENV RUN_SCRIPTS 1 # Enable execution of scripts in /var/www/html/scripts/run-once
-ENV REAL_IP_HEADER 1 # If behind a load balancer like Render's
-
-# Laravel specific environment variables (will be primarily set in Render dashboard)
+# Definir variáveis de ambiente
+# O WEB_DOCUMENT_ROOT é /app/public por defeito nesta imagem, o que é correto para Laravel.
 ENV APP_ENV production
 ENV APP_DEBUG false
 ENV LOG_CHANNEL stderr
+# Outras variáveis como APP_KEY, DATABASE_URL serão definidas no painel da Render.
 
-# APP_KEY, DATABASE_URL, DB_CONNECTION etc. should be set in Render's environment variables.
-# The base image CMD ["/start.sh"] will:
-# 1. Run composer install (if SKIP_COMPOSER=0, which is default, and vendor dir is not complete)
-# 2. Run scripts in /var/www/html/scripts/runonce (if RUN_SCRIPTS=1)
-# 3. Start supervisord (nginx, php-fpm)
+# Copiar o código da aplicação para o diretório /app da imagem
+COPY . /app
+
+# Copiar o script de deploy para o diretório de scripts de inicialização da imagem.
+# Os scripts em /docker-entrypoint.d/ são executados na inicialização do container.
+# O nome começa com um número para controlar a ordem de execução.
+COPY ./scripts/runonce/01-laravel-deploy.sh /docker-entrypoint.d/30-laravel-deploy.sh
+
+# Tornar o script de deploy executável
+RUN chmod +x /docker-entrypoint.d/30-laravel-deploy.sh
+
+# Ajustar permissões para os diretórios de storage e cache do Laravel.
+# A imagem webdevops/php-nginx usa o utilizador 'application' (UID 1000).
+RUN chown -R application:application /app/storage /app/bootstrap/cache && \
+    chmod -R 775 /app/storage /app/bootstrap/cache
+
+# A imagem base webdevops/php-nginx já lida com a instalação de dependências do Composer
+# e inicia o Nginx e PHP-FPM. Não é necessário um CMD aqui.
+
